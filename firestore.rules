@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all rule to prevent unauthorized access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Basic authentication state helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Server-side Developer Authorization check
+    // Rooted on verified developer email, developer role stored in users collection, or configured developer email in developer_system_config
+    function isDeveloper() {
+      return isSignedIn() && (
+        request.auth.token.email == 'zihanalam.at@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer') ||
+        (exists(/databases/$(database)/documents/settings/developer_system_config) &&
+         request.auth.token.email == get(/databases/$(database)/documents/settings/developer_system_config).data.developerEmail)
+      );
+    }
+
+    // Validates initial agency registration document structure upon signup
+    // Ensures normal registering users cannot pre-approve themselves, assign their own agencyCode, or grant roles
+    function isValidAgencyRegistration(data) {
+      return (
+        (!('role' in data) || data.role == 'agency') &&
+        (!('agencyCode' in data) || data.agencyCode == '') &&
+        (!('accountStatus' in data) || data.accountStatus == null || data.accountStatus == false) &&
+        (!('isApproved' in data) || data.isApproved == null || data.isApproved == false) &&
+        (!('status' in data) || data.status == 'Pending') &&
+        (!('management' in data) || (
+          (!('accountStatus' in data.management) || data.management.accountStatus == 'Pending' || data.management.accountStatus == false) &&
+          (!('agencyCode' in data.management) || data.management.agencyCode == '')
+        ))
+      );
+    }
+
+    // Checks that protected administrative fields are not modified during standard self-updates
+    function doesNotModifyAdministrativeFields() {
+      let incoming = request.resource.data;
+      let existing = resource.data;
+      return (
+        // Role cannot be changed by the user
+        (!('role' in incoming) || incoming.role == existing.role) &&
+        // Top-level status & approval flags cannot be escalated
+        (!('accountStatus' in incoming) || incoming.accountStatus == existing.accountStatus) &&
+        (!('isApproved' in incoming) || incoming.isApproved == existing.isApproved) &&
+        (!('status' in incoming) || incoming.status == existing.status) &&
+        // Agency code cannot be altered by normal user
+        (!('agencyCode' in incoming) || incoming.agencyCode == existing.agencyCode) &&
+        // Management object agencyCode and accountStatus cannot be manipulated by normal user
+        (!('management' in incoming) || (
+          (!('agencyCode' in incoming.management) || !('management' in existing) || !('agencyCode' in existing.management) || incoming.management.agencyCode == existing.management.agencyCode) &&
+          (!('accountStatus' in incoming.management) || !('management' in existing) || !('accountStatus' in existing.management) || incoming.management.accountStatus == existing.management.accountStatus)
+        ))
+      );
+    }
+
+    // Users collection:
+    // 1. Read: Public read is preserved to allow pre-auth Agency Code lookup during login/onboarding.
+    // 2. Create: Developers can create any user doc; new users can only create their own doc during registration with default unapproved/pending fields.
+    // 3. Update: Developers have full update privileges; regular users can only update their own non-administrative profile/session fields.
+    // 4. Delete: Developers only.
+    match /users/{userId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() && (
+        isDeveloper() ||
+        (request.auth.uid == userId && isValidAgencyRegistration(request.resource.data))
+      );
+
+      allow update: if isSignedIn() && (
+        isDeveloper() ||
+        (request.auth.uid == userId && doesNotModifyAdministrativeFields())
+      );
+
+      allow delete: if isSignedIn() && isDeveloper();
+
+      // User-isolated subcollections (trips, settings, logs)
+      // Strictly restricted to authenticated owner request.auth.uid == userId or authorized developer
+      match /trips/{tripId} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isDeveloper());
+      }
+
+      match /settings/{settingsId} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isDeveloper());
+      }
+
+      match /activity_logs/{logId} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isDeveloper());
+      }
+    }
+
+    // Activity logs collection (User & Developer Activity)
+    match /activity_logs/{logId} {
+      allow create: if isSignedIn();
+      allow read, write: if isDeveloper();
+    }
+
+    // Developer Notifications (e.g. New User Registrations, System Alerts)
+    match /developer_notifications/{notificationId} {
+      allow create: if true;
+      allow read, update, delete: if isDeveloper();
+    }
+
+    // System activity logs for developer audit trail
+    match /developer_audit_logs/{logId} {
+      allow create: if isSignedIn();
+      allow read, write: if isDeveloper();
+    }
+
+    // Agency Codes & Licenses collection for developer pool & provisioning
+    match /agency_licenses/{licenseId} {
+      allow read: if true;
+      allow write: if isDeveloper();
+    }
+
+    // Settings collection for system-wide settings
+    match /settings/{settingsId} {
+      allow read: if true;
+      allow write: if isDeveloper();
+    }
+
+    // Isolated access only for existing data folder: documents must match ownerUid
+    match /data/{agencyName} {
+      allow read, write: if isSignedIn() && isDeveloper();
+
+      match /trips/{tripId} {
+        allow read, write: if isSignedIn() && (
+          isDeveloper() ||
+          (resource != null && resource.data.ownerUid == request.auth.uid) ||
+          (request.resource != null && request.resource.data.ownerUid == request.auth.uid)
+        );
+      }
+
+      match /settings/{settingsId} {
+        allow read, write: if isSignedIn() && (
+          isDeveloper() ||
+          (resource != null && resource.data.ownerUid == request.auth.uid) ||
+          (request.resource != null && request.resource.data.ownerUid == request.auth.uid)
+        );
+      }
+    }
+  }
+}
+

@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an authenticated travel agency with registration information and developer management controls.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "name": { "type": "string" },
+        "agencyCode": { "type": "string" },
+        "agencyName": { "type": "string" },
+        "accountStatus": { "type": "boolean", "description": "true for Active, false for Suspended" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Suspended", "Pending", "DEACTIVE"] },
+        "information": {
+          "type": "object",
+          "description": "User registration information submitted by the agency operator."
+        },
+        "management": {
+          "type": "object",
+          "description": "Developer control fields: agencyCode (string), accountStatus (boolean: true for Active, false for Suspended), userName, activatedAt, lastLogin, expiresAt."
+        },
+        "createdAt": { "type": "object" },
+        "lastLogin": { "type": "object" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "Represents a bus trip schedule with its seat booking layout status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tripName": { "type": "string" },
+        "route": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "busName": { "type": "string" },
+        "agencyName": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "seats": { "type": "object" }
+      },
+      "required": ["id", "route", "date", "time", "busName", "seats"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Agency counter settings and printing layouts.",
+      "type": "object",
+      "properties": {
+        "busName": { "type": "string" },
+        "heading": { "type": "string" },
+        "route": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "theme": { "type": "string", "enum": ["dark", "light"] },
+        "logo": { "type": "string" },
+        "devLine": { "type": "string" },
+        "ticketHeader": { "type": "string" },
+        "ticketFooter": { "type": "string" },
+        "printWidthMm": { "type": "number" }
+      },
+      "required": ["busName", "heading", "theme", "printWidthMm"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Authenticated user profiles with information and management sub-objects."
+    },
+    "/users/{userId}/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "Completely user-isolated bus trips, routes, seat allocations, passenger records, and bookings for the authenticated user."
+    },
+    "/users/{userId}/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Completely user-isolated agency preferences, bus branding, and printing configurations."
+    }
+  }
+}
