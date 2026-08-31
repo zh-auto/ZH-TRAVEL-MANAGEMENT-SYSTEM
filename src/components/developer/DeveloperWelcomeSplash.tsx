@@ -16,7 +16,7 @@ export default function DeveloperWelcomeSplash({ user, onComplete, logoSrc }: De
   const statusPhases = [
     'AUTHENTICATING ROOT CREDENTIALS...',
     'VERIFYING SYSTEM GOVERNANCE PRIVILEGES...',
-    'MOUNTING DEVELOPER CONTROL PANEL...',
+    'MOUNTING DEVELOPER PANEL...',
   ];
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function DeveloperWelcomeSplash({ user, onComplete, logoSrc }: De
             transition={{ duration: 0.85, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="text-2xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-wider font-display drop-shadow-[0_2px_20px_rgba(255,255,255,0.25)] leading-tight"
           >
-            DEVELOPER CONTROL PANEL
+            DEVELOPER PANEL
           </motion.h1>
         </div>
 

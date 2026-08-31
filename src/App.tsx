@@ -243,8 +243,10 @@ export default function App() {
       }
     };
 
-    const isRegistering = sessionStorage.getItem('is_registering') === 'true';
-    if (!isRegistering) {
+    const isRegistering = sessionStorage.getItem('is_registering') === 'true' || localStorage.getItem('is_registering') === 'true';
+    const hasPendingReg = sessionStorage.getItem('pending_agency_reg') !== null || localStorage.getItem('pending_agency_reg') !== null;
+    const isAdmin = fbUser.email === 'zihanalam.at@gmail.com';
+    if (isAdmin && !isRegistering && !hasPendingReg) {
       ensureUserDocExists();
     }
 
@@ -402,11 +404,14 @@ export default function App() {
           setShowDeveloperSplash(true);
         }
       } else {
-        // If user document does not exist and they are not admin, sign them out immediately
+        // If user document does not exist and they are not admin:
+        // Do NOT sign out if the user is in registration/email-verification flow (unverified or has pending data)
         if (!isAdmin) {
-          const isReg = sessionStorage.getItem('is_registering') === 'true';
-          const hasPendingReg = sessionStorage.getItem('pending_agency_reg') !== null;
-          if (!isReg && !hasPendingReg) {
+          const isReg = sessionStorage.getItem('is_registering') === 'true' || localStorage.getItem('is_registering') === 'true';
+          const hasPendingReg = sessionStorage.getItem('pending_agency_reg') !== null || localStorage.getItem('pending_agency_reg') !== null;
+          const isUnverified = !fbUser.emailVerified;
+
+          if (!isReg && !hasPendingReg && !isUnverified) {
             signOut(auth).catch(err => console.error('Error signing out non-existent user:', err));
             setCurrentUser(null);
           }

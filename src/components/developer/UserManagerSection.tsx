@@ -592,7 +592,7 @@ export default function UserManagerSection({
                     <h3 className="text-sm font-bold text-white">Edit / Change Agency Code</h3>
                     <p className="text-[11px] text-white/70">
                       Set the active unique login code for{' '}
-                      <strong className="text-amber-400">
+                      <strong className="text-white">
                         {editingCodeUser.information?.agencyName || editingCodeUser.agencyName || 'Agency'}
                       </strong>
                     </p>

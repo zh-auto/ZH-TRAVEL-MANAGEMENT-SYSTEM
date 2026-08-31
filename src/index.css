@@ -1874,3 +1874,225 @@ textarea.text-input {
   -webkit-text-fill-color: #FFFFFF !important;
 }
 
+/* ==========================================================================
+   DEVELOPER PANEL COMPREHENSIVE THEME ENGINE (DARK / LIGHT MODE)
+   ========================================================================== */
+
+/* DEVELOPER PANEL - DARK MODE */
+.developer-panel-container[data-theme="dark"] {
+  background-color: #070A0E !important;
+  color: #F1F5F9 !important;
+}
+
+.developer-panel-container[data-theme="dark"] header {
+  background-color: rgba(14, 19, 26, 0.96) !important;
+  border-bottom-color: #1E2633 !important;
+}
+
+.developer-panel-container[data-theme="dark"] header h1,
+.developer-panel-container[data-theme="dark"] .dev-header-title {
+  color: #FFFFFF !important;
+}
+
+.developer-panel-container[data-theme="dark"] header p,
+.developer-panel-container[data-theme="dark"] .dev-header-subtitle {
+  color: #CBD5E1 !important;
+}
+
+.developer-panel-container[data-theme="dark"] h1,
+.developer-panel-container[data-theme="dark"] h2,
+.developer-panel-container[data-theme="dark"] h3,
+.developer-panel-container[data-theme="dark"] h4,
+.developer-panel-container[data-theme="dark"] h5 {
+  color: #FFFFFF !important;
+}
+
+.developer-panel-container[data-theme="dark"] input,
+.developer-panel-container[data-theme="dark"] select,
+.developer-panel-container[data-theme="dark"] textarea {
+  color: #F8FAFC !important;
+  background-color: #141A23 !important;
+  border-color: #232D3B !important;
+}
+
+.developer-panel-container[data-theme="dark"] input::placeholder,
+.developer-panel-container[data-theme="dark"] textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.developer-panel-container[data-theme="dark"] table th {
+  color: #CBD5E1 !important;
+  background-color: #141A23 !important;
+}
+
+.developer-panel-container[data-theme="dark"] table td {
+  color: #E2E8F0 !important;
+}
+
+/* DEVELOPER PANEL - LIGHT MODE */
+.developer-panel-container[data-theme="light"] {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+}
+
+/* Header in Light Mode */
+.developer-panel-container[data-theme="light"] header {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-bottom-color: #E2E8F0 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.developer-panel-container[data-theme="light"] header h1,
+.developer-panel-container[data-theme="light"] .dev-header-title {
+  color: #0F172A !important;
+  text-shadow: none !important;
+}
+
+.developer-panel-container[data-theme="light"] header p,
+.developer-panel-container[data-theme="light"] .dev-header-subtitle {
+  color: #475569 !important;
+}
+
+/* Cards and Surfaces in Light Mode */
+.developer-panel-container[data-theme="light"] .bg-\[\#0E141C\],
+.developer-panel-container[data-theme="light"] .bg-\[\#0E131A\] {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.developer-panel-container[data-theme="light"] .bg-\[\#141A23\],
+.developer-panel-container[data-theme="light"] .bg-\[\#121822\],
+.developer-panel-container[data-theme="light"] .bg-\[\#161E2B\],
+.developer-panel-container[data-theme="light"] .bg-\[\#090D14\],
+.developer-panel-container[data-theme="light"] .bg-\[\#1A222F\],
+.developer-panel-container[data-theme="light"] .bg-\[\#1A2330\] {
+  background-color: #F1F5F9 !important;
+  border-color: #CBD5E1 !important;
+}
+
+/* Borders in Light Mode */
+.developer-panel-container[data-theme="light"] .border-\[\#1E2633\],
+.developer-panel-container[data-theme="light"] .border-\[\#232D3B\],
+.developer-panel-container[data-theme="light"] .border-\[\#202A38\],
+.developer-panel-container[data-theme="light"] .border-\[\#1C2634\],
+.developer-panel-container[data-theme="light"] .border-\[\#2B384A\],
+.developer-panel-container[data-theme="light"] .border-\[\#2D394A\] {
+  border-color: #E2E8F0 !important;
+}
+
+/* Typography in Light Mode */
+.developer-panel-container[data-theme="light"] h1,
+.developer-panel-container[data-theme="light"] h2,
+.developer-panel-container[data-theme="light"] h3,
+.developer-panel-container[data-theme="light"] h4,
+.developer-panel-container[data-theme="light"] h5,
+.developer-panel-container[data-theme="light"] .text-white {
+  color: #0F172A !important;
+}
+
+/* Retain high-contrast white text for solid colored action buttons and badges */
+.developer-panel-container[data-theme="light"] button.bg-amber-500,
+.developer-panel-container[data-theme="light"] button.bg-amber-600,
+.developer-panel-container[data-theme="light"] button.bg-red-600,
+.developer-panel-container[data-theme="light"] button.bg-red-500,
+.developer-panel-container[data-theme="light"] button.bg-emerald-600,
+.developer-panel-container[data-theme="light"] button.bg-emerald-500,
+.developer-panel-container[data-theme="light"] button.bg-blue-600,
+.developer-panel-container[data-theme="light"] button.bg-blue-500,
+.developer-panel-container[data-theme="light"] span.bg-amber-500,
+.developer-panel-container[data-theme="light"] span.bg-red-500,
+.developer-panel-container[data-theme="light"] span.bg-emerald-500,
+.developer-panel-container[data-theme="light"] .keep-text-white {
+  color: #FFFFFF !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-white\/90,
+.developer-panel-container[data-theme="light"] .text-white\/85,
+.developer-panel-container[data-theme="light"] .text-white\/80 {
+  color: #334155 !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-white\/70,
+.developer-panel-container[data-theme="light"] .text-white\/60 {
+  color: #64748B !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-white\/50,
+.developer-panel-container[data-theme="light"] .text-white\/40,
+.developer-panel-container[data-theme="light"] .text-white\/30 {
+  color: #94A3B8 !important;
+}
+
+/* Readable accent badge text colors in Light Mode */
+.developer-panel-container[data-theme="light"] .text-amber-400 {
+  color: #B45309 !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-emerald-400 {
+  color: #047857 !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-red-400 {
+  color: #B91C1C !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-blue-400 {
+  color: #1D4ED8 !important;
+}
+
+.developer-panel-container[data-theme="light"] .text-purple-400 {
+  color: #6D28D9 !important;
+}
+
+/* Light mode form controls */
+.developer-panel-container[data-theme="light"] input,
+.developer-panel-container[data-theme="light"] select,
+.developer-panel-container[data-theme="light"] textarea {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+.developer-panel-container[data-theme="light"] input::placeholder,
+.developer-panel-container[data-theme="light"] textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+/* Navigation tabs in Light Mode */
+.developer-panel-container[data-theme="light"] .bg-\[\#1C2634\] {
+  background-color: #E2E8F0 !important;
+  color: #334155 !important;
+}
+
+/* Light mode popovers & dropdowns */
+.developer-panel-container[data-theme="light"] .shadow-2xl {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Light mode table styling */
+.developer-panel-container[data-theme="light"] table thead,
+.developer-panel-container[data-theme="light"] table th {
+  background-color: #F1F5F9 !important;
+  color: #334155 !important;
+  border-color: #E2E8F0 !important;
+}
+
+.developer-panel-container[data-theme="light"] table tbody,
+.developer-panel-container[data-theme="light"] table td {
+  border-color: #E2E8F0 !important;
+  color: #1E293B !important;
+}
+
+.developer-panel-container[data-theme="light"] table tbody tr:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* Light mode code/JSON blocks */
+.developer-panel-container[data-theme="light"] pre {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+  border-color: #E2E8F0 !important;
+}
+
+

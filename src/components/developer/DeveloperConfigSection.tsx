@@ -303,7 +303,7 @@ export default function DeveloperConfigSection({
                 </div>
 
                 {/* Light Frame Preview */}
-                <div className="p-3.5 rounded-xl bg-[#F1F5F9] border border-gray-300 flex flex-col items-center justify-center text-center space-y-2 text-gray-800">
+                <div className="p-3.5 rounded-xl bg-[#F1F5F9] border border-gray-300 flex flex-col items-center justify-center text-center space-y-2">
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white border border-gray-200 shadow-sm p-1.5 flex items-center justify-center overflow-hidden">
                     <img
                       src={currentActiveLogo}
@@ -315,7 +315,7 @@ export default function DeveloperConfigSection({
                       }}
                     />
                   </div>
-                  <span className="text-[10px] font-mono text-gray-600">Light Ticket Preview</span>
+                  <span className="text-[10px] font-mono text-slate-700 font-semibold">Light Ticket Preview</span>
                 </div>
               </div>
 

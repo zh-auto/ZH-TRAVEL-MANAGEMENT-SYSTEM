@@ -58,6 +58,8 @@ import {
   Inbox,
   Sparkles,
   CheckCircle2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { FirestoreUserData, AgencyLicense, AuditLog, SystemConfig, DeveloperNotification } from './developer/types';
 import UserManagerSection from './developer/UserManagerSection';
@@ -90,6 +92,30 @@ export default function DeveloperPanel({
   onLogout,
   onShowToast,
 }: DeveloperPanelProps) {
+  // Theme State (Dark / Light Mode) persisted locally in localStorage
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const savedTheme = localStorage.getItem('dev_panel_theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        return savedTheme;
+      }
+    } catch (err) {
+      console.warn('Could not read dev_panel_theme from localStorage:', err);
+    }
+    return 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    try {
+      localStorage.setItem('dev_panel_theme', nextTheme);
+    } catch (err) {
+      console.warn('Could not persist dev_panel_theme to localStorage:', err);
+    }
+    onShowToast?.(`Developer Panel switched to ${nextTheme === 'light' ? 'Light' : 'Dark'} Mode`);
+  };
+
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'userData' | 'licenses' | 'activity' | 'config' | 'database'>('dashboard');
 
@@ -1024,9 +1050,14 @@ export default function DeveloperPanel({
   }, [auditLogs, logSearch, logFilterAction]);
 
   return (
-    <div className="min-h-screen bg-[#070A0E] text-[#E9EEF3] flex flex-col font-sans selection:bg-amber-500/30">
+    <div
+      className={`developer-panel-container min-h-screen flex flex-col font-sans selection:bg-amber-500/30 transition-colors duration-200 ${
+        theme === 'light' ? 'bg-[#F8FAFC] text-[#0F172A]' : 'bg-[#070A0E] text-[#E9EEF3]'
+      }`}
+      data-theme={theme}
+    >
       {/* Topbar: Developer Master Control */}
-      <header className="sticky top-0 z-40 bg-[#0E131A]/95 backdrop-blur-md border-b border-[#1E2633] px-4 sm:px-6 py-3 flex items-center justify-between shadow-xl">
+      <header className="sticky top-0 z-40 bg-[#0E131A]/95 backdrop-blur-md border-b border-[#1E2633] px-4 sm:px-6 py-3 flex items-center justify-between shadow-xl transition-colors duration-200">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white border border-white/30 flex items-center justify-center shadow-lg shadow-black/30 p-1 overflow-hidden flex-shrink-0">
             <img
@@ -1041,21 +1072,46 @@ export default function DeveloperPanel({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-extrabold tracking-wider text-white font-display uppercase drop-shadow-sm">
-                DEVELOPER CONTROL PANEL
+              <h1 className="text-sm sm:text-base font-extrabold tracking-wider font-display uppercase drop-shadow-sm dev-header-title">
+                DEVELOPER PANEL
               </h1>
               <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
                 Master Root
               </span>
             </div>
-            <p className="text-xs text-white/80">
+            <p className="text-xs text-white/80 dev-header-subtitle">
               Enterprise System Authorization &amp; Infrastructure Governance
             </p>
           </div>
         </div>
 
-        {/* Developer Session Info, Notification Bell & Sign Out */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        {/* Developer Session Info, Dark/Light Mode Toggle, Notification Bell & Sign Out */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Theme Toggle Button (Dark / Light Mode) */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm ${
+              theme === 'light'
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-800 hover:bg-amber-500/25 shadow-amber-500/10'
+                : 'bg-[#141A23] border-[#232D3B] text-white/85 hover:text-white hover:bg-[#1A222F]'
+            }`}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Developer Panel Theme"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun size={16} className="text-amber-400" />
+                <span className="hidden sm:inline font-semibold">Light Mode</span>
+              </>
+            ) : (
+              <>
+                <Moon size={16} className="text-indigo-600" />
+                <span className="hidden sm:inline font-semibold">Dark Mode</span>
+              </>
+            )}
+          </button>
+
           {/* Real-time Notification Bell Popover Trigger */}
           <div className="relative">
             <button
