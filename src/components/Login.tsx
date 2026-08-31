@@ -213,6 +213,13 @@ export default function Login({
         const normalizedInputEmail = inputEmail.trim().toLowerCase();
         const trimmedInputCode = inputCode.trim();
 
+        // Generate a new unique developer session ID for single-device developer enforcement
+        const newDevSessionId = `sess_dev_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
+        try {
+          sessionStorage.setItem('is_developer_logging_in', 'true');
+          sessionStorage.setItem('pending_dev_session_id', newDevSessionId);
+        } catch (e) {}
+
         // 1. Establish Firebase Auth session
         let user = auth.currentUser;
         if (!user || user.email?.toLowerCase() !== normalizedInputEmail) {
@@ -221,6 +228,8 @@ export default function Login({
             user = cred.user;
           } catch (authErr: any) {
             console.error('Firebase Auth sign in failed:', authErr);
+            sessionStorage.removeItem('is_developer_logging_in');
+            sessionStorage.removeItem('pending_dev_session_id');
             const errCode = authErr?.code || '';
             if (errCode === 'auth/user-not-found' || errCode === 'auth/wrong-password' || errCode === 'auth/invalid-credential') {
               setError('Invalid developer credentials.');
@@ -238,10 +247,18 @@ export default function Login({
 
         const devUid = user?.uid;
         if (!devUid) {
+          sessionStorage.removeItem('is_developer_logging_in');
+          sessionStorage.removeItem('pending_dev_session_id');
           setError('Failed to resolve authenticated developer identity.');
           setLoading(false);
           return;
         }
+
+        // Save developer session to separate developer storage key
+        try {
+          localStorage.setItem(`counterpro_developer_session_${devUid}`, newDevSessionId);
+          localStorage.setItem(`counterpro_session_${devUid}`, newDevSessionId);
+        } catch (e) {}
 
         // 2. Fetch existing user document to verify server-side Developer status and Developer Code
         const userRef = doc(db, 'users', devUid);
@@ -267,6 +284,9 @@ export default function Login({
           devUserData.management?.agencyCode === trimmedInputCode;
 
         if (!isAuthorizedEmail || !isCodeMatch) {
+          sessionStorage.removeItem('is_developer_logging_in');
+          sessionStorage.removeItem('pending_dev_session_id');
+          localStorage.removeItem(`counterpro_developer_session_${devUid}`);
           await signOut(auth).catch(() => {});
           setError('Invalid developer credentials. Account is not authorized as Developer.');
           setLoading(false);
@@ -274,15 +294,6 @@ export default function Login({
         }
 
         const resolvedName = devUserData.name || devUserData.displayName || devUserData.information?.adminName || 'System Developer';
-
-        // Generate a new unique session ID to enforce single active session across devices
-        const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
-        try {
-          localStorage.setItem(`counterpro_session_${devUid}`, newSessionId);
-          if (user?.uid) {
-            localStorage.setItem(`counterpro_session_${user.uid}`, newSessionId);
-          }
-        } catch (e) {}
 
         // 4. Update developer session & profile in Firestore
         const updatedDoc = {
@@ -292,7 +303,8 @@ export default function Login({
           isApproved: true,
           agencyCode: trimmedInputCode || devUserData.agencyCode || '',
           email: normalizedInputEmail,
-          activeSessionId: newSessionId,
+          activeDevSessionId: newDevSessionId,
+          activeSessionId: newDevSessionId,
           lastLogin: serverTimestamp(),
           lastActivity: serverTimestamp(),
           lastSessionAt: serverTimestamp(),
@@ -341,7 +353,8 @@ export default function Login({
           createdAt: devUserData.createdAt || serverTimestamp(),
           status: 'Active',
           accountStatus: true,
-          activeSessionId: newSessionId,
+          activeSessionId: newDevSessionId,
+          activeDevSessionId: newDevSessionId,
           information: {
             agencyName: devUserData.information?.agencyName || 'Developer Panel',
             adminName: resolvedName,
@@ -356,6 +369,10 @@ export default function Login({
             lastLogin: serverTimestamp(),
           },
         };
+
+        // Clean up transient pending flags
+        sessionStorage.removeItem('is_developer_logging_in');
+        sessionStorage.removeItem('pending_dev_session_id');
 
         // Trigger professional animated typography transition (~3 seconds) before opening Developer Panel
         sessionStorage.setItem('trigger_dev_splash', 'true');
@@ -514,12 +531,18 @@ export default function Login({
 
         // 4. Authenticate in Firebase Auth using registered email
         const userEmail = userData.information?.email || userData.email;
+        const newSessionId = `sess_usr_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
+        try {
+          sessionStorage.setItem('is_user_logging_in', 'true');
+          sessionStorage.setItem('pending_user_session_id', newSessionId);
+        } catch (e) {}
+
         const cred = await signInWithEmailAndPassword(auth, userEmail, loginPassword);
         const user = cred.user;
 
-        // Generate unique session ID for single-active-session enforcement
-        const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
+        // Store user-specific session ID in separate user storage key
         try {
+          localStorage.setItem(`counterpro_user_session_${user.uid}`, newSessionId);
           localStorage.setItem(`counterpro_session_${user.uid}`, newSessionId);
         } catch (e) {}
 
@@ -573,8 +596,13 @@ export default function Login({
           console.warn('User login activity log notice:', logErr);
         }
 
+        sessionStorage.removeItem('is_user_logging_in');
+        sessionStorage.removeItem('pending_user_session_id');
+
         onLoginSuccess(userObj);
       } catch (err: any) {
+        sessionStorage.removeItem('is_user_logging_in');
+        sessionStorage.removeItem('pending_user_session_id');
         console.error('Login error:', err);
         const code = err.code || '';
         const msg = err.message || '';

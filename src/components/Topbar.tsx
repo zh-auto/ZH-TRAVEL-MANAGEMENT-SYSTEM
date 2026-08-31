@@ -53,7 +53,7 @@ export default function Topbar({
         </div>
         <div className="brand-text">
           <span className="brand-name" id="busNameDisplay">
-            {settings.busName || 'Counter Pro'}
+            {settings.busName || 'ZH Travel Management'}
           </span>
           <span className="brand-tag">ZH TRAVEL MANAGEMENT SYSTEM</span>
         </div>

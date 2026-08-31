@@ -224,10 +224,27 @@ export default function DeveloperPanel({
   const handleExecuteDeveloperLogout = async () => {
     setIsLoggingOut(true);
     try {
+      if (currentUser?.uid) {
+        try {
+          localStorage.removeItem(`counterpro_developer_session_${currentUser.uid}`);
+          localStorage.removeItem(`counterpro_session_${currentUser.uid}`);
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          await updateDoc(userDocRef, {
+            activeDevSessionId: '',
+            activeSessionId: '',
+            lastLogout: serverTimestamp(),
+          });
+        } catch (sessErr) {
+          console.warn('Developer session logout note:', sessErr);
+        }
+      }
       await signOut(auth);
     } catch (err) {
       console.error('Sign out error:', err);
     } finally {
+      if (currentUser?.uid) {
+        localStorage.removeItem(`counterpro_developer_session_${currentUser.uid}`);
+      }
       localStorage.removeItem('counterpro_auth_v1');
       sessionStorage.clear();
       setIsLoggingOut(false);

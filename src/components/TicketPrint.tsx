@@ -22,7 +22,7 @@ export default function TicketPrint({ settings, trip, printedSeatIds }: TicketPr
         const s = trip.seats[seatId];
         if (!s) return null;
 
-        const busName = trip.busName || settings.busName || 'Counter Pro';
+        const busName = trip.busName || settings.busName || 'ZH Travel Management';
         const devLine = settings.devLine || 'ZIHAN | +8801830343515';
         const headerText = settings.ticketHeader?.trim();
         const footerText = settings.ticketFooter?.trim() || 'Thank you for travelling with us';

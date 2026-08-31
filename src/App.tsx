@@ -277,7 +277,7 @@ export default function App() {
         }
 
         const loginId = mgmt.agencyCode || data.agencyCode || data.loginId || data.memberId || (isAdmin ? 'ADM-2026-0001' : '');
-        const agencyName = info.agencyName || data.agencyName || data.name || data.displayName || fbUser.email?.split('@')[0] || 'User';
+        const agencyName = data.agencyName || info.agencyName || data.displayName || data.name || fbUser.email?.split('@')[0] || 'User';
         const adminName = info.adminName || data.adminName || data.displayName || data.name || 'Admin';
         const memberIdAssigned = isAdmin || loginId.trim() !== '';
 
@@ -287,54 +287,94 @@ export default function App() {
         const isDeveloperUser = fbUser.email === 'zihanalam.at@gmail.com' || data.role === 'developer' || data.role === 'admin';
         const roleVal = data.role === 'developer' ? 'developer' : (isDeveloperUser ? 'developer' : (data.role || 'agency'));
 
-        // --- SINGLE ACTIVE SESSION SYSTEM ENFORCEMENT ---
-        // Every account (Agency and Developer) enforces single-active-session strictly.
-        const serverSessionId = data.activeSessionId;
-        const localSessionKey = `counterpro_session_${fbUser.uid}`;
-        const localSessionId = localStorage.getItem(localSessionKey);
+        // --- SEPARATE SESSION ARCHITECTURE & ENFORCEMENT ---
+        if (isDeveloperUser) {
+          // DEVELOPER PANEL: Strict Single Active Session Enforcement
+          const devServerSessionId = data.activeDevSessionId || data.activeSessionId;
+          const devLocalSessionKey = `counterpro_developer_session_${fbUser.uid}`;
+          const devLocalSessionId = localStorage.getItem(devLocalSessionKey) || localStorage.getItem(`counterpro_session_${fbUser.uid}`);
+          const isDevLoggingIn = sessionStorage.getItem('is_developer_logging_in') === 'true';
+          const pendingDevSessionId = sessionStorage.getItem('pending_dev_session_id');
 
-        if (serverSessionId && localSessionId && localSessionId !== serverSessionId) {
-          // Superseded: The same account logged in from a new device/browser (Device B)
-          console.warn(`[SingleSession] Session superseded for UID ${fbUser.uid}. Server: ${serverSessionId}, Local: ${localSessionId}`);
-          const kickMsg = 'This account was signed in on another device. You have been logged out. (এই একাউন্টটি অন্য একটি ডিভাইসে লগইন করা হয়েছে। আপনি লগআউট হয়ে গেছেন।)';
-          setSessionTerminatedNotice(kickMsg);
-          localStorage.removeItem(localSessionKey);
-          sessionStorage.removeItem('trigger_dev_splash');
-          signOut(auth).catch(err => console.error('Signout error on session mismatch:', err));
-          setCurrentUser(null);
-          setAppState(defaultState());
-          setLocalActiveTripId('');
-          activeTripIdRef.current = '';
-          setPrintedSeatIds([]);
-          setCurrentView('dashboard');
-          showToast('This account was signed in on another device. You have been logged out.', true);
-          return;
-        } else if (serverSessionId && !localSessionId && !isReg && !hasPendingReg) {
-          // A server active session exists, but this client does not possess the matching local session token.
-          console.warn(`[SingleSession] Unrecognized or superseded session for UID ${fbUser.uid}. Server: ${serverSessionId}`);
-          const kickMsg = 'This account was signed in on another device. You have been logged out. (এই একাউন্টটি অন্য একটি ডিভাইসে লগইন করা হয়েছে। আপনি লগআউট হয়ে গেছেন।)';
-          setSessionTerminatedNotice(kickMsg);
-          localStorage.removeItem(localSessionKey);
-          sessionStorage.removeItem('trigger_dev_splash');
-          signOut(auth).catch(err => console.error('Signout error on missing session token:', err));
-          setCurrentUser(null);
-          setAppState(defaultState());
-          setLocalActiveTripId('');
-          activeTripIdRef.current = '';
-          setPrintedSeatIds([]);
-          setCurrentView('dashboard');
-          return;
-        } else if (!serverSessionId && localSessionId) {
-          updateDoc(userRef, { activeSessionId: localSessionId, lastSessionAt: serverTimestamp() }).catch(() => {});
-        } else if (!serverSessionId && !localSessionId && !isReg && !hasPendingReg) {
-          const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
-          try {
-            localStorage.setItem(localSessionKey, newSessionId);
-          } catch (e) {}
-          updateDoc(userRef, { activeSessionId: newSessionId, lastSessionAt: serverTimestamp() }).catch(() => {});
+          if (isDevLoggingIn) {
+            // Active login in progress on this device: adopt new session ID and do not kick out
+            const effectiveSessionId = pendingDevSessionId || devLocalSessionId || devServerSessionId || '';
+            try {
+              if (effectiveSessionId) {
+                localStorage.setItem(devLocalSessionKey, effectiveSessionId);
+                localStorage.setItem(`counterpro_session_${fbUser.uid}`, effectiveSessionId);
+              }
+            } catch (e) {}
+          } else if (devServerSessionId && devLocalSessionId && devLocalSessionId !== devServerSessionId) {
+            // Superseded: The developer logged in from another device/browser (Device B)
+            console.warn(`[DeveloperSingleSession] Session superseded for Developer UID ${fbUser.uid}. Server: ${devServerSessionId}, Local: ${devLocalSessionId}`);
+            const kickMsg = 'The developer account was signed in on another device. You have been logged out. (ডেভেলপার অ্যাকাউন্টটি অন্য একটি ডিভাইসে লগইন করা হয়েছে। আপনি লগআউট হয়ে গেছেন।)';
+            setSessionTerminatedNotice(kickMsg);
+            localStorage.removeItem(devLocalSessionKey);
+            localStorage.removeItem(`counterpro_session_${fbUser.uid}`);
+            sessionStorage.removeItem('trigger_dev_splash');
+            signOut(auth).catch(err => console.error('Signout error on developer session mismatch:', err));
+            setCurrentUser(null);
+            setAppState(defaultState());
+            setLocalActiveTripId('');
+            activeTripIdRef.current = '';
+            setPrintedSeatIds([]);
+            setCurrentView('dashboard');
+            showToast('The developer account was signed in on another device. You have been logged out.', true);
+            return;
+          } else if (devServerSessionId && !devLocalSessionId && !isReg && !hasPendingReg) {
+            // Server has an active developer session, but this client does not possess the matching developer session token
+            console.warn(`[DeveloperSingleSession] Unrecognized developer session for UID ${fbUser.uid}. Server: ${devServerSessionId}`);
+            const kickMsg = 'The developer account was signed in on another device. You have been logged out. (ডেভেলপার অ্যাকাউন্টটি অন্য একটি ডিভাইসে লগইন করা হয়েছে। আপনি লগআউট হয়ে গেছেন।)';
+            setSessionTerminatedNotice(kickMsg);
+            localStorage.removeItem(devLocalSessionKey);
+            localStorage.removeItem(`counterpro_session_${fbUser.uid}`);
+            sessionStorage.removeItem('trigger_dev_splash');
+            signOut(auth).catch(err => console.error('Signout error on missing dev token:', err));
+            setCurrentUser(null);
+            setAppState(defaultState());
+            setLocalActiveTripId('');
+            activeTripIdRef.current = '';
+            setPrintedSeatIds([]);
+            setCurrentView('dashboard');
+            return;
+          } else if (!devServerSessionId && devLocalSessionId) {
+            updateDoc(userRef, { activeDevSessionId: devLocalSessionId, activeSessionId: devLocalSessionId, lastSessionAt: serverTimestamp() }).catch(() => {});
+          } else if (!devServerSessionId && !devLocalSessionId && !isReg && !hasPendingReg) {
+            const newDevSessionId = `sess_dev_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
+            try {
+              localStorage.setItem(devLocalSessionKey, newDevSessionId);
+              localStorage.setItem(`counterpro_session_${fbUser.uid}`, newDevSessionId);
+            } catch (e) {}
+            updateDoc(userRef, { activeDevSessionId: newDevSessionId, activeSessionId: newDevSessionId, lastSessionAt: serverTimestamp() }).catch(() => {});
+          }
+        } else {
+          // USER PANEL: Independent user account session isolation
+          const userLocalSessionKey = `counterpro_user_session_${fbUser.uid}`;
+          const userLocalSessionId = localStorage.getItem(userLocalSessionKey) || localStorage.getItem(`counterpro_session_${fbUser.uid}`);
+          const isUserLoggingIn = sessionStorage.getItem('is_user_logging_in') === 'true';
+          const pendingUserSessionId = sessionStorage.getItem('pending_user_session_id');
+
+          if (isUserLoggingIn && pendingUserSessionId) {
+            try {
+              localStorage.setItem(userLocalSessionKey, pendingUserSessionId);
+              localStorage.setItem(`counterpro_session_${fbUser.uid}`, pendingUserSessionId);
+            } catch (e) {}
+          } else if (userLocalSessionId && !data.activeSessionId) {
+            updateDoc(userRef, { activeSessionId: userLocalSessionId, lastSessionAt: serverTimestamp() }).catch(() => {});
+          } else if (!userLocalSessionId && data.activeSessionId) {
+            try {
+              localStorage.setItem(userLocalSessionKey, data.activeSessionId);
+              localStorage.setItem(`counterpro_session_${fbUser.uid}`, data.activeSessionId);
+            } catch (e) {}
+          }
         }
 
         const isApprovedVal = isAdmin || isDeveloperUser ? true : (mgmtStatus === true || topStatus === true || data.isApproved === true || stringStatus === 'Active' || memberIdAssigned);
+
+        const currentActiveSessionId = isDeveloperUser
+          ? (data.activeDevSessionId || data.activeSessionId || localStorage.getItem(`counterpro_developer_session_${fbUser.uid}`) || '')
+          : (data.activeSessionId || localStorage.getItem(`counterpro_user_session_${fbUser.uid}`) || '');
 
         setCurrentUser({
           uid: fbUser.uid,
@@ -352,7 +392,8 @@ export default function App() {
           createdAt: data.createdAt,
           status: isSuspended ? 'Suspended' : (isApprovedVal ? 'Active' : 'Pending'),
           accountStatus: !isSuspended,
-          activeSessionId: serverSessionId || localSessionId,
+          activeSessionId: currentActiveSessionId,
+          activeDevSessionId: isDeveloperUser ? currentActiveSessionId : undefined,
           information: info,
           management: mgmt,
         });
@@ -401,7 +442,7 @@ export default function App() {
     return () => unsubUser();
   }, [fbUser]);
 
-  // Real-time listener for agency settings: data/{agencyName}/settings/config (with fallback to users/{uid}/settings/config)
+  // Real-time listener for agency settings: users/{uid}/settings/config
   useEffect(() => {
     if (!fbUser || !currentUser || !currentUser.isApproved || !currentUser.memberIdAssigned) return;
 
@@ -409,26 +450,28 @@ export default function App() {
 
     const unsubSettings = onSnapshot(userSettingsRef, async (snap) => {
       if (snap.exists()) {
-        setAppState(prev => ({
-          ...prev,
-          settings: snap.data() as Settings
-        }));
+        const loadedSettings = snap.data() as Settings;
+        setAppState(prev => {
+          const nextSettings = {
+            ...defaultSettings(),
+            ...loadedSettings,
+          };
+          const nextState = {
+            ...prev,
+            settings: nextSettings,
+          };
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+          } catch (e) {}
+          return nextState;
+        });
       } else {
         try {
-          const agencyKey = currentUser.agencyName || currentUser.displayName || 'ZH Travel';
-          // Check for legacy settings to migrate if available
+          const agencyKey = currentUser.agencyName || currentUser.displayName || 'ZH Travel Management';
           let baseSettings: Settings = defaultSettings();
-          try {
-            const dataSettingsRef = doc(db, 'data', agencyKey, 'settings', 'config');
-            const dataSnap = await getDoc(dataSettingsRef);
-            if (dataSnap.exists() && dataSnap.data().ownerUid === currentUser.uid) {
-              baseSettings = dataSnap.data() as Settings;
-            }
-          } catch (e) {}
-
           const initSettings: Settings = {
             ...baseSettings,
-            busName: agencyKey || baseSettings.busName || 'ZH Travel',
+            busName: agencyKey || baseSettings.busName || 'ZH Travel Management',
           };
 
           await setDoc(userSettingsRef, initSettings, { merge: true });
@@ -445,7 +488,7 @@ export default function App() {
     });
 
     return () => unsubSettings();
-  }, [fbUser, currentUser?.agencyName, currentUser?.uid, currentUser?.isApproved, currentUser?.memberIdAssigned]);
+  }, [fbUser?.uid, currentUser?.uid, currentUser?.isApproved, currentUser?.memberIdAssigned]);
 
   // Real-time listener for strictly isolated user trips: users/{userId}/trips/{tripId}
   useEffect(() => {
@@ -666,9 +709,12 @@ export default function App() {
 
       if (currentUser?.uid) {
         try {
+          localStorage.removeItem(`counterpro_developer_session_${currentUser.uid}`);
+          localStorage.removeItem(`counterpro_user_session_${currentUser.uid}`);
           localStorage.removeItem(`counterpro_session_${currentUser.uid}`);
           const userDocRef = doc(db, 'users', currentUser.uid);
           await updateDoc(userDocRef, {
+            activeDevSessionId: '',
             activeSessionId: '',
             lastLogout: serverTimestamp(),
           });
@@ -1011,18 +1057,45 @@ export default function App() {
   const handleSaveSettings = async (updatedSettings: Settings) => {
     if (!currentUser?.uid) return;
     try {
-      const newAgencyName = updatedSettings.busName || currentUser.agencyName || 'ZH Travel';
+      const newAgencyName = updatedSettings.busName?.trim() || currentUser.agencyName || 'ZH Travel Management';
       const userSettingsRef = doc(db, 'users', currentUser.uid, 'settings', 'config');
       
-      await setDoc(userSettingsRef, updatedSettings, { merge: true });
+      const normalizedSettings: Settings = {
+        ...updatedSettings,
+        busName: newAgencyName,
+      };
 
+      // 1. Save settings to users/{uid}/settings/config
+      await setDoc(userSettingsRef, normalizedSettings, { merge: true });
+
+      // 2. Properly update user profile in Firestore
       const userRef = doc(db, 'users', currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      const existingUserData = userSnap.exists() ? userSnap.data() : {};
+      const existingInfo = existingUserData.information || {};
+
       await setDoc(userRef, {
         agencyName: newAgencyName,
-        'information.agencyName': newAgencyName,
+        displayName: newAgencyName,
+        information: {
+          ...existingInfo,
+          agencyName: newAgencyName,
+        },
       }, { merge: true });
 
-      // Update all trip documents with new agency name and bus name automatically
+      // 3. Update active in-memory state and localStorage
+      setAppState(prev => {
+        const nextState = {
+          ...prev,
+          settings: normalizedSettings,
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        } catch (e) {}
+        return nextState;
+      });
+
+      // 4. Update all trip documents with new agency name and bus name automatically
       for (const tripId of Object.keys(appState.trips)) {
         try {
           await updateDoc(doc(db, 'users', currentUser.uid, 'trips', tripId), {
@@ -1035,12 +1108,23 @@ export default function App() {
         }
       }
 
-      setCurrentUser(prev => prev ? {
-        ...prev,
-        agencyName: newAgencyName,
-        displayName: newAgencyName,
-        name: newAgencyName,
-      } : prev);
+      setCurrentUser(prev => {
+        if (!prev) return prev;
+        const nextUser: AuthUser = {
+          ...prev,
+          agencyName: newAgencyName,
+          displayName: newAgencyName,
+          information: {
+            ...prev.information,
+            agencyName: newAgencyName,
+          },
+        };
+        try {
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+        } catch (e) {}
+        return nextUser;
+      });
+
       showToast('Settings saved successfully');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `users/${currentUser?.uid}/settings/config`);
@@ -1129,10 +1213,10 @@ export default function App() {
     return <NoMemberId currentUser={currentUser} onLogout={handleLogout} />;
   }
 
-  // Dynamically derive settings overriding the busName/companyName with the logged-in Agency Name
+  // Dynamically derive settings prioritizing saved settings busName
   const derivedSettings: Settings = {
     ...appState.settings,
-    busName: currentUser?.agencyName || appState.settings.busName,
+    busName: appState.settings.busName || currentUser?.agencyName || 'ZH Travel Management',
     logo: globalSystemLogo || appState.settings.logo || ZH_OFFICIAL_LOGO,
   };
 

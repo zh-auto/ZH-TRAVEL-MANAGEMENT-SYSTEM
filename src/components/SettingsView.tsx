@@ -15,7 +15,7 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ settings, onSaveSettings, onShowToast, currentUser }: SettingsViewProps) {
-  const [busName, setBusName] = useState(settings.busName);
+  const [busName, setBusName] = useState(settings.busName || '');
   const [heading, setHeading] = useState(settings.heading || '');
   const [route, setRoute] = useState(settings.route || '');
   const [date, setDate] = useState(settings.date || '');
@@ -34,6 +34,38 @@ export default function SettingsView({ settings, onSaveSettings, onShowToast, cu
   );
 
   const [savedVisible, setSavedVisible] = useState(false);
+
+  // Sync internal state when external settings props change from Firestore or parent state
+  useEffect(() => {
+    if (settings.busName) setBusName(settings.busName);
+    if (settings.heading !== undefined) setHeading(settings.heading);
+    if (settings.route !== undefined) setRoute(settings.route);
+    if (settings.date !== undefined) setDate(settings.date);
+    if (settings.time !== undefined) setTime(settings.time);
+    if (settings.theme !== undefined) setTheme(settings.theme);
+    if (settings.logo !== undefined) setLogo(settings.logo);
+    if (settings.devLine !== undefined) setDevLine(settings.devLine);
+    if (settings.ticketHeader !== undefined) setTicketHeader(settings.ticketHeader);
+    if (settings.ticketFooter !== undefined) setTicketFooter(settings.ticketFooter);
+    if (settings.printWidthMm) {
+      setPrintWidthOption(settings.printWidthMm === 58 ? '58' : settings.printWidthMm === 80 ? '80' : 'custom');
+      if (settings.printWidthMm !== 58 && settings.printWidthMm !== 80) {
+        setCustomWidthMm(settings.printWidthMm);
+      }
+    }
+  }, [
+    settings.busName,
+    settings.heading,
+    settings.route,
+    settings.date,
+    settings.time,
+    settings.theme,
+    settings.logo,
+    settings.devLine,
+    settings.ticketHeader,
+    settings.ticketFooter,
+    settings.printWidthMm,
+  ]);
 
   // Apply theme change locally to documentElement
   useEffect(() => {
@@ -68,7 +100,7 @@ export default function SettingsView({ settings, onSaveSettings, onShowToast, cu
         : Number(printWidthOption);
 
     const updated: Settings = {
-      busName: busName.trim() || 'Counter Pro',
+      busName: busName.trim() || 'ZH Travel Management',
       heading: heading.trim(),
       route: route.trim(),
       date,
@@ -449,6 +481,17 @@ export default function SettingsView({ settings, onSaveSettings, onShowToast, cu
         <span className={`save-confirm ${savedVisible ? 'show' : ''}`} id="saveConfirm">
           Saved
         </span>
+      </div>
+
+      <div className="mt-8 pt-4 pb-2 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between text-xs text-[var(--text-muted)] gap-2">
+        <div className="flex items-center gap-2">
+          <span>ZH Travel Management System</span>
+          <span>•</span>
+          <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-[var(--panel-2)] border border-[var(--border)] text-[var(--text-dim)]">v1.9.26</span>
+        </div>
+        <div className="text-[11px] font-mono opacity-80">
+          Release 2026.1
+        </div>
       </div>
     </section>
   );

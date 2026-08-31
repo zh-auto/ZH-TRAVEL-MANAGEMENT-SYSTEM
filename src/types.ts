@@ -39,6 +39,7 @@ export interface AuthUser {
   information?: UserInformation;
   management?: UserManagement;
   activeSessionId?: string;
+  activeDevSessionId?: string;
 }
 
 export interface SeatInfo {
