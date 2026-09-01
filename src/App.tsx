@@ -449,7 +449,7 @@ export default function App() {
 
   // Real-time listener for agency settings: users/{uid}/settings/config
   useEffect(() => {
-    if (!fbUser || !currentUser || !currentUser.isApproved || !currentUser.memberIdAssigned) return;
+    if (!fbUser || !currentUser || fbUser.uid !== currentUser.uid || !currentUser.isApproved || !currentUser.memberIdAssigned) return;
 
     const userSettingsRef = doc(db, 'users', currentUser.uid, 'settings', 'config');
 
@@ -497,7 +497,7 @@ export default function App() {
 
   // Real-time listener for strictly isolated user trips: users/{userId}/trips/{tripId}
   useEffect(() => {
-    if (!fbUser || !currentUser || !currentUser.isApproved || !currentUser.memberIdAssigned) return;
+    if (!fbUser || !currentUser || fbUser.uid !== currentUser.uid || !currentUser.isApproved || !currentUser.memberIdAssigned) return;
 
     const userTripsRef = collection(db, 'users', currentUser.uid, 'trips');
 

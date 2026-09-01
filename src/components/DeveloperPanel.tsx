@@ -350,6 +350,41 @@ export default function DeveloperPanel({
     return () => unsub();
   }, []);
 
+  // 2b. Automatically reconcile and ensure all assigned agency codes in users exist in agency_licenses
+  useEffect(() => {
+    if (loadingUsers || usersList.length === 0) return;
+    
+    usersList.forEach(async (u) => {
+      const code = (u.management?.agencyCode || u.agencyCode || u.loginId || '').trim();
+      if (!code) return;
+      const codeUpper = code.toUpperCase();
+      const email = (u.information?.email || u.email || '').trim();
+      if (!email) return;
+      const name = u.information?.agencyName || u.agencyName || 'Agency';
+      
+      const payload = {
+        code: code,
+        agencyCode: code,
+        status: 'active',
+        notes: `Auto-synced for ${name}`,
+        assignedUserId: u.id,
+        assignedAgencyName: name,
+        assignedEmail: email,
+        assignedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      try {
+        await setDoc(doc(db, 'agency_licenses', code), payload, { merge: true });
+        if (code !== codeUpper) {
+          await setDoc(doc(db, 'agency_licenses', codeUpper), payload, { merge: true });
+        }
+      } catch (e) {
+        console.warn('Auto-sync license notice:', e);
+      }
+    });
+  }, [loadingUsers, usersList]);
+
   // 3. Real-time dynamic Firestore listener for Activity Logs & Developer Audit Logs
   const [activityLogsList, setActivityLogsList] = useState<AuditLog[]>([]);
   const [developerAuditList, setDeveloperAuditList] = useState<AuditLog[]>([]);
@@ -635,19 +670,25 @@ export default function DeveloperPanel({
 
       // Sync with Agency Licenses pool if active
       if (codeTrimmed) {
-        const matchingLicense = licenses.find((l) => l.code.toUpperCase() === codeTrimmed.toUpperCase());
-        if (matchingLicense) {
-          try {
-            await updateDoc(doc(db, 'agency_licenses', matchingLicense.id), {
-              status: 'active',
-              assignedUserId: userId,
-              assignedAgencyName: targetAgencyName,
-              assignedEmail: targetEmail,
-              assignedAt: serverTimestamp(),
-            });
-          } catch (licErr) {
-            console.warn('Notice updating license pool:', licErr);
+        const payload = {
+          code: codeTrimmed,
+          agencyCode: codeTrimmed,
+          status: 'active',
+          notes: `Assigned to ${targetAgencyName}`,
+          assignedUserId: userId,
+          assignedAgencyName: targetAgencyName,
+          assignedEmail: targetEmail,
+          assignedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        try {
+          await setDoc(doc(db, 'agency_licenses', codeTrimmed), payload, { merge: true });
+          if (codeTrimmed.toUpperCase() !== codeTrimmed) {
+            await setDoc(doc(db, 'agency_licenses', codeTrimmed.toUpperCase()), payload, { merge: true });
           }
+        } catch (licErr) {
+          console.warn('Notice updating license pool:', licErr);
         }
       }
 
@@ -778,15 +819,20 @@ export default function DeveloperPanel({
   // --- AGENCY LICENSE / CODE MANAGEMENT HANDLERS ---
   const handleCreateLicense = async (code: string, status: 'active' | 'deactive', notes?: string) => {
     try {
-      const docRef = await addDoc(collection(db, 'agency_licenses'), {
-        code: code.toUpperCase().trim(),
+      const codeUpper = code.toUpperCase().trim();
+      const payload = {
+        code: codeUpper,
+        agencyCode: codeUpper,
         status,
         notes: notes || '',
         assignedUserId: null,
         assignedAgencyName: null,
         assignedEmail: null,
         createdAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'agency_licenses', codeUpper), payload, { merge: true });
 
       await logDeveloperAction(
         'CREATE_AGENCY_CODE',
@@ -824,6 +870,10 @@ export default function DeveloperPanel({
   const handleDeleteLicense = async (licenseId: string, code: string) => {
     try {
       await deleteDoc(doc(db, 'agency_licenses', licenseId));
+      if (code && code !== licenseId) {
+        await deleteDoc(doc(db, 'agency_licenses', code)).catch(() => {});
+        await deleteDoc(doc(db, 'agency_licenses', code.toUpperCase())).catch(() => {});
+      }
 
       await logDeveloperAction(
         'DELETE_AGENCY_CODE',
@@ -845,14 +895,23 @@ export default function DeveloperPanel({
       const agencyName = targetUser?.information?.agencyName || targetUser?.agencyName || 'Agency';
       const email = targetUser?.information?.email || targetUser?.email || '';
 
-      // Update license document
-      const licRef = doc(db, 'agency_licenses', licenseId);
-      await updateDoc(licRef, {
+      const payload = {
+        code: code,
+        agencyCode: code,
         assignedUserId: userId,
         assignedAgencyName: agencyName,
         assignedEmail: email,
         assignedAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      // Update license document
+      const licRef = doc(db, 'agency_licenses', licenseId);
+      await updateDoc(licRef, payload);
+      await setDoc(doc(db, 'agency_licenses', code), payload, { merge: true });
+      if (code.toUpperCase() !== code) {
+        await setDoc(doc(db, 'agency_licenses', code.toUpperCase()), payload, { merge: true });
+      }
 
       // Update user document
       const userRef = doc(db, 'users', userId);
@@ -880,13 +939,20 @@ export default function DeveloperPanel({
       const lic = licenses.find((l) => l.id === licenseId);
       const prevUserId = lic?.assignedUserId;
 
-      const licRef = doc(db, 'agency_licenses', licenseId);
-      await updateDoc(licRef, {
+      const unassignPayload = {
         assignedUserId: null,
         assignedAgencyName: null,
         assignedEmail: null,
         assignedAt: null,
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      const licRef = doc(db, 'agency_licenses', licenseId);
+      await updateDoc(licRef, unassignPayload);
+      if (code) {
+        await setDoc(doc(db, 'agency_licenses', code), unassignPayload, { merge: true }).catch(() => {});
+        await setDoc(doc(db, 'agency_licenses', code.toUpperCase()), unassignPayload, { merge: true }).catch(() => {});
+      }
 
       if (prevUserId) {
         const userRef = doc(db, 'users', prevUserId);
@@ -916,7 +982,12 @@ export default function DeveloperPanel({
       const licRef = doc(db, 'agency_licenses', licenseId);
       await updateDoc(licRef, {
         status: nextStatus,
+        updatedAt: serverTimestamp(),
       });
+      if (code) {
+        await setDoc(doc(db, 'agency_licenses', code), { status: nextStatus, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+        await setDoc(doc(db, 'agency_licenses', code.toUpperCase()), { status: nextStatus, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+      }
 
       await logDeveloperAction(
         nextStatus === 'active' ? 'ACTIVATE_AGENCY_CODE' : 'DEACTIVATE_AGENCY_CODE',

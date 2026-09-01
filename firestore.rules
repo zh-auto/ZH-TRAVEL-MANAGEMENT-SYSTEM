@@ -15,11 +15,14 @@ service cloud.firestore {
     // Rooted on verified developer email, developer role stored in users collection, or configured developer email in developer_system_config
     function isDeveloper() {
       return isSignedIn() && (
-        request.auth.token.email == 'zihanalam.at@gmail.com' ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'zihanalam.at@gmail.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         'role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer') ||
         (exists(/databases/$(database)/documents/settings/developer_system_config) &&
-         request.auth.token.email == get(/databases/$(database)/documents/settings/developer_system_config).data.developerEmail)
+         'developerEmail' in get(/databases/$(database)/documents/settings/developer_system_config).data &&
+         request.auth.token.email != null &&
+         request.auth.token.email.lower() == get(/databases/$(database)/documents/settings/developer_system_config).data.developerEmail.lower())
       );
     }
 
@@ -27,13 +30,13 @@ service cloud.firestore {
     // Ensures normal registering users cannot pre-approve themselves, assign their own agencyCode, or grant roles
     function isValidAgencyRegistration(data) {
       return (
-        (!('role' in data) || data.role == 'agency') &&
+        (!('role' in data) || data.role == 'agency' || data.role == 'member') &&
         (!('agencyCode' in data) || data.agencyCode == '') &&
         (!('accountStatus' in data) || data.accountStatus == null || data.accountStatus == false) &&
         (!('isApproved' in data) || data.isApproved == null || data.isApproved == false) &&
-        (!('status' in data) || data.status == 'Pending') &&
+        (!('status' in data) || data.status == 'Pending' || data.status == 'pending') &&
         (!('management' in data) || (
-          (!('accountStatus' in data.management) || data.management.accountStatus == 'Pending' || data.management.accountStatus == false) &&
+          (!('accountStatus' in data.management) || data.management.accountStatus == 'Pending' || data.management.accountStatus == 'pending' || data.management.accountStatus == false) &&
           (!('agencyCode' in data.management) || data.management.agencyCode == '')
         ))
       );
@@ -45,28 +48,30 @@ service cloud.firestore {
       let existing = resource.data;
       return (
         // Role cannot be changed by the user
-        (!('role' in incoming) || incoming.role == existing.role) &&
+        (!('role' in incoming) || !('role' in existing) || incoming.role == existing.role) &&
         // Top-level status & approval flags cannot be escalated
-        (!('accountStatus' in incoming) || incoming.accountStatus == existing.accountStatus) &&
-        (!('isApproved' in incoming) || incoming.isApproved == existing.isApproved) &&
-        (!('status' in incoming) || incoming.status == existing.status) &&
+        (!('accountStatus' in incoming) || !('accountStatus' in existing) || incoming.accountStatus == existing.accountStatus) &&
+        (!('isApproved' in incoming) || !('isApproved' in existing) || incoming.isApproved == existing.isApproved) &&
+        (!('status' in incoming) || !('status' in existing) || incoming.status == existing.status) &&
         // Agency code cannot be altered by normal user
-        (!('agencyCode' in incoming) || incoming.agencyCode == existing.agencyCode) &&
+        (!('agencyCode' in incoming) || !('agencyCode' in existing) || incoming.agencyCode == existing.agencyCode) &&
         // Management object agencyCode and accountStatus cannot be manipulated by normal user
-        (!('management' in incoming) || (
-          (!('agencyCode' in incoming.management) || !('management' in existing) || !('agencyCode' in existing.management) || incoming.management.agencyCode == existing.management.agencyCode) &&
-          (!('accountStatus' in incoming.management) || !('management' in existing) || !('accountStatus' in existing.management) || incoming.management.accountStatus == existing.management.accountStatus)
+        (!('management' in incoming) || !('management' in existing) || (
+          (!('agencyCode' in incoming.management) || !('agencyCode' in existing.management) || incoming.management.agencyCode == existing.management.agencyCode) &&
+          (!('accountStatus' in incoming.management) || !('accountStatus' in existing.management) || incoming.management.accountStatus == existing.management.accountStatus)
         ))
       );
     }
 
     // Users collection:
-    // 1. Read: Public read is preserved to allow pre-auth Agency Code lookup during login/onboarding.
-    // 2. Create: Developers can create any user doc; new users can only create their own doc during registration with default unapproved/pending fields.
-    // 3. Update: Developers have full update privileges; regular users can only update their own non-administrative profile/session fields.
-    // 4. Delete: Developers only.
+    // 1. Get: Authenticated owner (request.auth.uid == userId) or authorized developer. (Protected private user data)
+    // 2. List: Developer only.
+    // 3. Create: Developers can create any user doc; new users can only create their own doc during registration with default unapproved/pending fields.
+    // 4. Update: Developers have full update privileges; regular users can only update their own non-administrative profile/session fields.
+    // 5. Delete: Developers only.
     match /users/{userId} {
-      allow read: if true;
+      allow get: if isSignedIn() && (request.auth.uid == userId || isDeveloper());
+      allow list: if isSignedIn() && isDeveloper();
 
       allow create: if isSignedIn() && (
         isDeveloper() ||
@@ -103,7 +108,7 @@ service cloud.firestore {
 
     // Developer Notifications (e.g. New User Registrations, System Alerts)
     match /developer_notifications/{notificationId} {
-      allow create: if true;
+      allow create: if isSignedIn();
       allow read, update, delete: if isDeveloper();
     }
 

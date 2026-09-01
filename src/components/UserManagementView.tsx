@@ -9,6 +9,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  setDoc,
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
@@ -231,10 +232,35 @@ export default function UserManagementView({
     setUpdatingId(userId);
     try {
       const userRef = doc(db, 'users', userId);
+      const targetUser = usersList.find((u) => u.id === userId);
+      const targetEmail = targetUser?.information?.email || targetUser?.email || '';
+      const targetName = targetUser?.information?.agencyName || targetUser?.agencyName || 'Agency';
+
       await updateDoc(userRef, {
         agencyCode: newCode,
         'management.agencyCode': newCode,
       });
+
+      if (newCode) {
+        const payload = {
+          code: newCode,
+          agencyCode: newCode,
+          status: 'active',
+          assignedUserId: userId,
+          assignedAgencyName: targetName,
+          assignedEmail: targetEmail,
+          updatedAt: serverTimestamp(),
+        };
+        try {
+          await setDoc(doc(db, 'agency_licenses', newCode), payload, { merge: true });
+          if (newCode.toUpperCase() !== newCode) {
+            await setDoc(doc(db, 'agency_licenses', newCode.toUpperCase()), payload, { merge: true });
+          }
+        } catch (licErr) {
+          console.warn('Sync license note in UserManagementView:', licErr);
+        }
+      }
+
       onShowToast(`Agency Code saved: ${newCode || '(cleared)'}`);
     } catch (err) {
       console.error('Error saving agency code:', err);

@@ -199,7 +199,7 @@ export default function Login({
     setError('');
     setSuccessMessage('');
 
-    // MODE 1: DEVELOPER LOGIN (Email + Developer Code / Password)
+    // MODE 1: DEVELOPER LOGIN (Email + Password, optional Developer Code)
     if (authMode === 'developer') {
       onClearSessionTerminatedNotice?.();
       const inputEmail = developerEmail.trim().toLowerCase();
@@ -211,9 +211,8 @@ export default function Login({
         return;
       }
 
-      const passwordToUse = inputPassword || inputCode;
-      if (!passwordToUse) {
-        setError('Please enter your Developer Code or Password.');
+      if (!inputPassword) {
+        setError('Please enter your Developer Password.');
         return;
       }
 
@@ -247,7 +246,7 @@ export default function Login({
         let user = auth.currentUser;
         if (!user || user.email?.toLowerCase() !== normalizedInputEmail) {
           try {
-            const cred = await signInWithEmailAndPassword(auth, normalizedInputEmail, passwordToUse);
+            const cred = await signInWithEmailAndPassword(auth, normalizedInputEmail, inputPassword);
             user = cred.user;
           } catch (authErr: any) {
             console.error('Firebase Auth sign in failed:', authErr);
@@ -303,8 +302,6 @@ export default function Login({
         const isCodeMatch =
           !configDevCode ||
           trimmedInputCode === configDevCode ||
-          trimmedInputCode === 'ZH-TM-dev-09' ||
-          trimmedInputCode === 'ZH-DEV-01' ||
           devUserData.agencyCode === trimmedInputCode ||
           devUserData.management?.agencyCode === trimmedInputCode ||
           devUserData.developerCode === trimmedInputCode;
@@ -490,7 +487,8 @@ export default function Login({
     // MODE 3: AGENCY LOGIN
     if (authMode === 'login') {
       onClearSessionTerminatedNotice?.();
-      if (!agencyCodeInput.trim() || !loginPassword) {
+      const inputCode = agencyCodeInput.trim();
+      if (!inputCode || !loginPassword) {
         setError('Please enter both Agency Code and Password. (এজেন্সি কোড এবং পাসওয়ার্ড পূরণ করুন)');
         return;
       }
@@ -498,76 +496,255 @@ export default function Login({
       setLoading(true);
 
       try {
-        // 1. Search users collection where agencyCode matches the input (or loginId or management.agencyCode)
-        const usersRef = collection(db, 'users');
-        let q = query(usersRef, where('agencyCode', '==', agencyCodeInput.trim()));
-        let querySnapshot = await getDocs(q);
+        let userEmail = '';
 
-        if (querySnapshot.empty) {
-          const qMgmt = query(usersRef, where('management.agencyCode', '==', agencyCodeInput.trim()));
-          querySnapshot = await getDocs(qMgmt);
+        // 1. Resolve user email via direct email or agency_licenses collection
+        if (inputCode.includes('@')) {
+          userEmail = inputCode.toLowerCase();
+        } else {
+          let matchedLicenseDoc: any = null;
+          const licRef = collection(db, 'agency_licenses');
+          const isNumeric = !isNaN(Number(inputCode));
+          const numCode = isNumeric ? Number(inputCode) : null;
+
+          // Strategy A: Direct Document ID Lookup (e.g. agency_licenses/333 or agency_licenses/ZH-333)
+          try {
+            const directDocSnap = await getDoc(doc(db, 'agency_licenses', inputCode));
+            if (directDocSnap.exists()) {
+              matchedLicenseDoc = directDocSnap;
+            } else {
+              const directDocUpperSnap = await getDoc(doc(db, 'agency_licenses', inputCode.toUpperCase()));
+              if (directDocUpperSnap.exists()) {
+                matchedLicenseDoc = directDocUpperSnap;
+              }
+            }
+          } catch (e) {
+            console.warn('Direct license doc lookup notice:', e);
+          }
+
+          // Strategy B: Query by 'code' field (string and number variants)
+          if (!matchedLicenseDoc) {
+            try {
+              // String query
+              let qCode = query(licRef, where('code', '==', inputCode));
+              let snap = await getDocs(qCode);
+              if (snap.empty) {
+                const qCodeUpper = query(licRef, where('code', '==', inputCode.toUpperCase()));
+                snap = await getDocs(qCodeUpper);
+              }
+              // Numeric query if applicable
+              if (snap.empty && numCode !== null) {
+                const qCodeNum = query(licRef, where('code', '==', numCode));
+                snap = await getDocs(qCodeNum);
+              }
+
+              if (!snap.empty) {
+                matchedLicenseDoc = snap.docs[0];
+              }
+            } catch (e) {
+              console.warn('Query by code notice:', e);
+            }
+          }
+
+          // Strategy C: Query by 'agencyCode' field (string and number variants)
+          if (!matchedLicenseDoc) {
+            try {
+              let qAgy = query(licRef, where('agencyCode', '==', inputCode));
+              let snap = await getDocs(qAgy);
+              if (snap.empty) {
+                const qAgyUpper = query(licRef, where('agencyCode', '==', inputCode.toUpperCase()));
+                snap = await getDocs(qAgyUpper);
+              }
+              if (snap.empty && numCode !== null) {
+                const qAgyNum = query(licRef, where('agencyCode', '==', numCode));
+                snap = await getDocs(qAgyNum);
+              }
+
+              if (!snap.empty) {
+                matchedLicenseDoc = snap.docs[0];
+              }
+            } catch (e) {
+              console.warn('Query by agencyCode notice:', e);
+            }
+          }
+
+          // Strategy D: Query by 'loginId', 'memberId', or 'licenseCode' fields
+          if (!matchedLicenseDoc) {
+            try {
+              const alternativeFields = ['loginId', 'memberId', 'licenseCode', 'licenseKey', 'license'];
+              for (const fieldName of alternativeFields) {
+                let snap = await getDocs(query(licRef, where(fieldName, '==', inputCode)));
+                if (snap.empty) {
+                  snap = await getDocs(query(licRef, where(fieldName, '==', inputCode.toUpperCase())));
+                }
+                if (snap.empty && numCode !== null) {
+                  snap = await getDocs(query(licRef, where(fieldName, '==', numCode)));
+                }
+                if (!snap.empty) {
+                  matchedLicenseDoc = snap.docs[0];
+                  break;
+                }
+              }
+            } catch (e) {
+              console.warn('Alternative field queries notice:', e);
+            }
+          }
+
+          // Strategy E: Resilient Collection Scan Fallback (handles whitespace, case-insensitivity, digit matching, or sub-objects)
+          if (!matchedLicenseDoc) {
+            try {
+              const allLicensesSnap = await getDocs(licRef);
+              const targetClean = inputCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+              const targetUpper = inputCode.trim().toUpperCase();
+
+              const foundDoc = allLicensesSnap.docs.find((d) => {
+                const data = d.data();
+                const idClean = d.id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                const idUpper = d.id.trim().toUpperCase();
+                if (idUpper === targetUpper || (targetClean && idClean === targetClean)) return true;
+
+                const possibleCodeValues = [
+                  data.code,
+                  data.agencyCode,
+                  data.agency_code,
+                  data.licenseCode,
+                  data.licenseKey,
+                  data.license,
+                  data.loginId,
+                  data.memberId,
+                  data.counterCode,
+                  data.agencyNo,
+                  data.agency_no,
+                  data.agencyId,
+                  data.agency_id,
+                  data.management?.agencyCode,
+                ];
+
+                return possibleCodeValues.some((val) => {
+                  if (val === undefined || val === null) return false;
+                  const str = String(val).trim().toUpperCase();
+                  const strClean = str.replace(/[^a-zA-Z0-9]/g, '');
+                  return str === targetUpper || (targetClean && strClean === targetClean);
+                });
+              });
+
+              if (foundDoc) {
+                matchedLicenseDoc = foundDoc;
+              }
+            } catch (e) {
+              console.warn('Resilient license pool scan notice:', e);
+            }
+          }
+
+          if (!matchedLicenseDoc) {
+            setError('Invalid Agency Code (ভুল এজেন্সি কোড)');
+            setLoading(false);
+            return;
+          }
+
+          const licData = matchedLicenseDoc.data();
+          const licStatus = String(licData.status || '').toLowerCase();
+          if (
+            licStatus === 'deactive' ||
+            licStatus === 'inactive' ||
+            licStatus === 'suspended' ||
+            licStatus === 'disabled' ||
+            licData.status === false ||
+            licData.isActive === false
+          ) {
+            setError('আপনার এজেন্সির লাইসেন্স নিষ্ক্রিয় করা হয়েছে, দয়া করে ডেভেলপারের সাথে যোগাযোগ করুন। (Your agency license is deactivated, please contact the developer.)');
+            setLoading(false);
+            return;
+          }
+
+          userEmail = (
+            licData.assignedEmail ||
+            licData.email ||
+            licData.userEmail ||
+            licData.assignedUserEmail ||
+            licData.targetEmail ||
+            licData.information?.email ||
+            licData.contactEmail ||
+            ''
+          ).trim().toLowerCase();
+
+          if (!userEmail) {
+            setError('This Agency Code is not linked to an active email address. (এই এজেন্সি কোডের সাথে কোনো ইমেইল যুক্ত নেই)');
+            setLoading(false);
+            return;
+          }
         }
 
-        if (querySnapshot.empty) {
-          const qFallback = query(usersRef, where('loginId', '==', agencyCodeInput.trim()));
-          querySnapshot = await getDocs(qFallback);
-        }
-
-        // 2. Error if Agency Code not found
-        if (querySnapshot.empty) {
-          setError('Invalid Agency Code (ভুল এজেন্সি কোড)');
-          setLoading(false);
-          return;
-        }
-
-        // 3. Inspect user status and management fields (Support Boolean accountStatus: true = Active, false = Suspended)
-        const docSnap = querySnapshot.docs[0];
-        const userData = docSnap.data();
-        
-        // Priority to management.accountStatus boolean, fallback to accountStatus, status, or isApproved
-        const mgmtStatus = userData.management?.accountStatus;
-        const topStatus = userData.accountStatus;
-        const stringStatus = userData.status;
-        
-        const isAccountSuspended = 
-          mgmtStatus === false || 
-          topStatus === false || 
-          mgmtStatus === 'Suspended' || 
-          mgmtStatus === 'DEACTIVE' || 
-          mgmtStatus === 'blocked' || 
-          stringStatus === 'Suspended' || 
-          stringStatus === 'DEACTIVE' || 
-          stringStatus === 'blocked';
-
-        if (isAccountSuspended) {
-          setError('আপনার অ্যাকাউন্টটি সাসপেন্ড করা হয়েছে, দয়া করে ডেভেলপারের সাথে যোগাযোগ করুন। (Your account has been suspended, please contact the developer.)');
-          setLoading(false);
-          return;
-        }
-
-        const isAccountActive = 
-          mgmtStatus === true || 
-          topStatus === true || 
-          mgmtStatus === 'Active' || 
-          stringStatus === 'Active' || 
-          userData.isApproved === true;
-
-        if (!isAccountActive && (mgmtStatus === 'Pending' || stringStatus === 'Pending' || stringStatus === 'pending')) {
-          setError('আপনার অ্যাকাউন্টটি অনুমোদনের জন্য অপেক্ষমাণ রয়েছে। (Your account is waiting for developer approval.)');
-          setLoading(false);
-          return;
-        }
-
-        // 4. Authenticate in Firebase Auth using registered email
-        const userEmail = userData.information?.email || userData.email;
+        // 2. Authenticate in Firebase Auth using registered email
         const newSessionId = `sess_usr_${Date.now()}_${Math.random().toString(36).substring(2, 11)}_${Math.random().toString(36).substring(2, 11)}`;
         try {
           sessionStorage.setItem('is_user_logging_in', 'true');
           sessionStorage.setItem('pending_user_session_id', newSessionId);
         } catch (e) {}
 
-        const cred = await signInWithEmailAndPassword(auth, userEmail, loginPassword);
+        const cred = await signInWithEmailAndPassword(auth, userEmail.trim().toLowerCase(), loginPassword.trim());
         const user = cred.user;
+
+        // 3. Fetch authenticated user document to verify account status
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (!userDocSnap.exists()) {
+          sessionStorage.removeItem('is_user_logging_in');
+          sessionStorage.removeItem('pending_user_session_id');
+          await signOut(auth).catch(() => {});
+          setError('User profile not found. Please contact the developer.');
+          setLoading(false);
+          return;
+        }
+
+        const userData = userDocSnap.data();
+
+        // Priority to management.accountStatus boolean, fallback to accountStatus, status, or isApproved
+        const mgmtStatus = userData.management?.accountStatus;
+        const topStatus = userData.accountStatus;
+        const stringStatus = userData.status;
+
+        const isAccountSuspended =
+          mgmtStatus === false ||
+          topStatus === false ||
+          mgmtStatus === 'Suspended' ||
+          mgmtStatus === 'DEACTIVE' ||
+          mgmtStatus === 'blocked' ||
+          stringStatus === 'Suspended' ||
+          stringStatus === 'DEACTIVE' ||
+          stringStatus === 'blocked';
+
+        if (isAccountSuspended) {
+          sessionStorage.removeItem('is_user_logging_in');
+          sessionStorage.removeItem('pending_user_session_id');
+          await signOut(auth).catch(() => {});
+          setError('আপনার অ্যাকাউন্টটি সাসপেন্ড করা হয়েছে, দয়া করে ডেভেলপারের সাথে যোগাযোগ করুন। (Your account has been suspended, please contact the developer.)');
+          setLoading(false);
+          return;
+        }
+
+        const assignedCode = userData.management?.agencyCode || userData.agencyCode || userData.loginId || inputCode;
+
+        const isAccountActive =
+          mgmtStatus === true ||
+          topStatus === true ||
+          mgmtStatus === 'Active' ||
+          stringStatus === 'Active' ||
+          mgmtStatus === 'active' ||
+          stringStatus === 'active' ||
+          userData.isApproved === true ||
+          userData.approved === true ||
+          (assignedCode && assignedCode.trim() !== '');
+
+        if (!isAccountActive && (mgmtStatus === 'Pending' || stringStatus === 'Pending' || stringStatus === 'pending')) {
+          sessionStorage.removeItem('is_user_logging_in');
+          sessionStorage.removeItem('pending_user_session_id');
+          await signOut(auth).catch(() => {});
+          setError('আপনার অ্যাকাউন্টটি অনুমোদনের জন্য অপেক্ষমাণ রয়েছে। (Your account is waiting for developer approval.)');
+          setLoading(false);
+          return;
+        }
 
         // Store user-specific session ID in separate user storage key
         try {
@@ -575,9 +752,8 @@ export default function Login({
           localStorage.setItem(`counterpro_session_${user.uid}`, newSessionId);
         } catch (e) {}
 
-        // 5. Success callback
+        // 4. Success callback
         const resolvedName = userData.information?.agencyName || userData.agencyName || userData.name || userData.displayName || userEmail.split('@')[0];
-        const assignedCode = userData.management?.agencyCode || userData.agencyCode || userData.loginId || '';
         const userObj: AuthUser = {
           uid: user.uid,
           email: userEmail,
@@ -599,14 +775,17 @@ export default function Login({
           management: userData.management,
         };
 
-        // Update activeSessionId, lastLogin and lastActivity on login success
-        await setDoc(doc(db, 'users', user.uid), {
-          activeSessionId: newSessionId,
-          lastLogin: serverTimestamp(),
-          lastActivity: serverTimestamp(),
-          lastSessionAt: serverTimestamp(),
-          'management.lastLogin': serverTimestamp(),
-        }, { merge: true });
+        // Update activeSessionId, lastLogin and lastActivity on login success (non-blocking)
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            activeSessionId: newSessionId,
+            lastLogin: serverTimestamp(),
+            lastActivity: serverTimestamp(),
+            lastSessionAt: serverTimestamp(),
+          }, { merge: true });
+        } catch (updateErr) {
+          console.warn('Non-blocking user session update notice:', updateErr);
+        }
 
         // Record User Login in Activity Logs in Firestore
         try {
@@ -630,22 +809,22 @@ export default function Login({
 
         onLoginSuccess(userObj);
       } catch (err: any) {
+        console.error('Login Error:', err);
         sessionStorage.removeItem('is_user_logging_in');
         sessionStorage.removeItem('pending_user_session_id');
-        console.error('Login error:', err);
-        const code = err.code || '';
-        const msg = err.message || '';
+        const code = err?.code || '';
+        const msg = err?.message || '';
 
         if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
           setError('Incorrect Password (ভুল পাসওয়ার্ড)');
         } else if (code === 'auth/user-not-found') {
-          setError('Authentication account not found. (অ্যাকাউন্ট পাওয়া যায়নি।)');
+          setError('User not found (ব্যবহারকারী পাওয়া যায়নি)');
+        } else if (code === 'auth/too-many-requests') {
+          setError('Too many failed login attempts. Please try again later. (অতিরিক্ত চেষ্টার কারণে সাময়িকভাবে বন্ধ করা হয়েছে।)');
         } else if (code === 'auth/network-request-failed' || msg.includes('network-request-failed') || msg.includes('network')) {
           setError('Network connection error. Please check your internet connection and try again. (ইন্টারনেট কানেকশন সমস্যা। অনুগ্রহ করে ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।)');
-        } else if (code === 'auth/too-many-requests') {
-          setError('Too many failed attempts. Please try again later. (অতিরিক্ত বার ভুল চেষ্টার কারণে সাময়িকভাবে বন্ধ করা হয়েছে।)');
         } else {
-          setError(msg || 'Login failed. Please try again.');
+          setError(err.message || 'Login failed. Please verify credentials.');
         }
       } finally {
         setLoading(false);
